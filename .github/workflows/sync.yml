@@ -1,4 +1,4 @@
-name: Check Data Sync
+name: Synchronization Job
 
 # Controls when the workflow will run
 on:
@@ -7,7 +7,11 @@ on:
       - main
   schedule:
     - cron:  '*/5 * * * *' 
-    
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+  
 env:
   # AWS S3 Credentials
   AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}

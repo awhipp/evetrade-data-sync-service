@@ -4,7 +4,6 @@ Service validation GitHub Action
 
 import os
 import time
-import urllib.request
 
 from elasticsearch import Elasticsearch, RequestsHttpConnection
 from urllib3 import PoolManager, Timeout
@@ -62,10 +61,3 @@ if time.time() - 60 * 60 > last_order_time:
     raise Exception(
         "No new data ingested into Elasticsearch index for the last 60 minutes."
     )
-
-status_code = urllib.request.urlopen("https://evetrade-api.herokuapp.com/").getcode()
-
-if status_code == 200:
-    print("EVETrade Data Sync Service is up.")
-else:
-    raise Exception("EVETrade Data Sync Service is not running.")
