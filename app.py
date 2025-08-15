@@ -3,11 +3,13 @@ Data Sync Service which pulls data from the EVE API and loads it into the Elasti
 """
 
 import asyncio
+import logging
 import os
 import threading
 import time
 import traceback
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -18,111 +20,122 @@ from sync_service.market_data import MarketData
 
 load_dotenv()
 
-AWS_BUCKET = os.getenv("AWS_BUCKET")
-ES_ALIAS = os.getenv("ES_ALIAS")
-ES_HOST = os.getenv("ES_HOST")
+AWS_BUCKET: Optional[str] = os.getenv("AWS_BUCKET")
+ES_ALIAS: Optional[str] = os.getenv("ES_ALIAS")
+ES_HOST: Optional[str] = os.getenv("ES_HOST")
+
+if not ES_HOST or not ES_ALIAS:
+    raise EnvironmentError(
+        "Missing required environment variables: ES_HOST and/or ES_ALIAS."
+    )
 
 es_client = Elasticsearch(ES_HOST)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+# Suppress Elasticsearch client logging
+logging.getLogger("elasticsearch").setLevel(logging.WARNING)
 
 
 # Function which pulls universeList.json file from S3
 # and returns the regionID values as an array
-def get_region_ids():
+def get_region_ids() -> List[int]:
     """
     Gets the region IDs from the universeList.json file
     """
-    s3_file_json: dict = requests.get(
-        "https://evetrade.s3.amazonaws.com/resources/universeList.json", timeout=30
-    ).json()
+    url = "https://evetrade.s3.amazonaws.com/resources/universeList.json"
+    try:
+        s3_file_json: Dict[str, Any] = requests.get(url, timeout=30).json()
+    except Exception as e:
+        logger.error(f"Failed to fetch region IDs: {e}")
+        raise
 
-    region_ids = []
-    for item in s3_file_json:
-        station = s3_file_json[item]
-
-        if "region" in station:
-            region_ids.append(station["region"])
-
-    region_ids = list(set(region_ids))
-
-    print(f"Getting orders for {len(region_ids)} regions.")
-
-    return region_ids
+    region_ids = {
+        station["region"] for station in s3_file_json.values() if "region" in station
+    }
+    logger.info(f"Getting orders for {len(region_ids)} regions.")
+    return list(region_ids)
 
 
-def get_data(index_name, region_ids):
+def get_data(index_name: str, region_ids: List[int]) -> int:
     """
-    Gets market data for a given region and saves it to the local file system
+    Gets market data for a given region and saves it to Elasticsearch
     """
-
-    threads = []
+    threads: List[threading.Thread] = []
     order_count = 0
 
+    # Ingest citadel orders synchronously (can be made async if needed)
     try:
-        orders = citadel_data.get_citadel_orders()
-        load_orders_to_es(index_name, orders, "Citadels")
-        order_count = len(orders)
+        citadel_orders = citadel_data.get_citadel_orders()
+        load_orders_to_es(index_name, citadel_orders, "Citadels")
+        order_count += len(citadel_orders)
     except Exception as e:
-        time.sleep(30)
-        print(e)
+        logger.error(f"Error loading citadel orders: {e}")
+
+    def ingest_region(region_id: int):
+        try:
+            market_data = MarketData(region_id)
+            orders = asyncio.run(market_data.execute_requests())
+            if orders:
+                load_orders_to_es(index_name, orders, region_id)
+                nonlocal order_count
+                order_count += len(orders)
+        except Exception as e:
+            logger.error(f"Error ingesting region {region_id}: {e}")
 
     for region_id in region_ids:
+        t = threading.Thread(
+            target=ingest_region,
+            args=(region_id,),
+            name=f"Ingesting Orders for {region_id}",
+        )
+        t.start()
+        threads.append(t)
 
-        market_data = MarketData(region_id)
-
-        orders = asyncio.run(market_data.execute_requests())
-
-        if len(orders) > 0:
-            order_thread = threading.Thread(
-                target=load_orders_to_es,
-                name=f"Ingesting Orders for {region_id}",
-                args=(index_name, orders, region_id),
-            )
-            order_thread.start()
-            threads.append(order_thread)
-            order_count += len(orders)
-
-    for order_thread in threads:
-        order_thread.join()
+    for t in threads:
+        t.join()
 
     return order_count
 
 
-def create_index(index_name):
+def create_index(index_name: str) -> str:
     """
     Creates the index for the data sync service
     """
-
-    print(f"Creating new index {index_name}")
-
+    logger.info(f"Creating new index {index_name}")
     es_index_settings = {"settings": {}}
-
     es_client.indices.create(index=index_name, body=es_index_settings)
     return index_name
 
 
-def load_orders_to_es(index_name, all_orders, region_id):
+def load_orders_to_es(index_name: str, all_orders: List[dict], region_id: Any) -> None:
     """
     Loads a list of orders to the Elasticsearch instance
     """
-    print(f"Ingesting {len(all_orders)} orders from {region_id} into {index_name}")
-    helpers.bulk(es_client, all_orders, index=index_name, request_timeout=30)
+    logger.info(
+        f"Ingesting {len(all_orders)} orders from {region_id} into {index_name}"
+    )
+    if all_orders:
+        helpers.bulk(es_client, all_orders, index=index_name, request_timeout=30)
 
 
-def get_index_with_alias(alias):
+def get_index_with_alias(alias: str) -> Optional[str]:
     """
     Returns the index name that the alias points to
     """
-    print(f"Getting index with alias {alias}")
+    logger.info(f"Getting index with alias {alias}")
     if es_client.indices.exists_alias(name=alias):
         return list(es_client.indices.get_alias(index=alias).keys())[0]
     return None
 
 
-def update_alias(new_index, alias):
+def update_alias(new_index: str, alias: str) -> None:
     """
     Updates the alias to point to the new index
     """
-    print(f"Removing adding {alias} to {new_index}")
+    logger.info(f"Updating alias {alias} to point to {new_index}")
     if new_index and alias:
         es_client.indices.update_aliases(
             body={
@@ -134,36 +147,36 @@ def update_alias(new_index, alias):
         )
 
 
-def refresh_index(index_name):
+def refresh_index(index_name: str) -> None:
     """
     Refreshes an index
     """
-    print(f"Refreshing index {index_name}")
+    logger.info(f"Refreshing index {index_name}")
     if index_name and es_client.indices.exists(index_name):
         es_client.indices.refresh(index=index_name)
 
 
-def delete_index(index_name):
+def delete_index(index_name: str) -> None:
     """
     Deletes an index from the Elasticsearch instance
     """
-    print(f"Deleting index {index_name}")
+    logger.info(f"Deleting index {index_name}")
     if index_name and es_client.indices.exists(index_name):
         es_client.indices.delete(index_name)
 
 
-def delete_stale_indices(protected_indices):
+def delete_stale_indices(protected_indices: List[str]) -> None:
     """
     Loop through all indices and delete any that are not currently in use
     """
     indices = es_client.indices.get_alias(index="*")
     for index in indices:
         if index not in protected_indices:
-            print(f"Deleting stale index {index}")
+            logger.info(f"Deleting stale index {index}")
             delete_index(index)
 
 
-def execute_sync():
+def main() -> None:
     """
     Executes the data sync process
     """
@@ -172,46 +185,32 @@ def execute_sync():
 
     try:
         index_name = f'market-data-{now.strftime("%Y%m%d-%H%M%S")}'
-        print(f"--Executing sync on index {index_name}")
+        logger.info(f"--Executing sync on index {index_name}")
 
         previous_index = get_index_with_alias(ES_ALIAS)
-        delete_stale_indices([previous_index, index_name, "evetrade_jump_data"])
+        protected = [i for i in [previous_index, index_name, "evetrade_jump_data"] if i]
+        delete_stale_indices(protected)
         region_ids = get_region_ids()
         create_index(index_name)
         get_data(index_name, region_ids)
-        region_ids = get_region_ids()
         update_alias(index_name, ES_ALIAS)
         refresh_index(ES_ALIAS)
         end = time.time()
         minutes = round((end - start) / 60, 2)
-        print(f"Completed in {minutes} minutes.")
-
-        if minutes > 4:
-            print(f"WARNING: Execution took {minutes} minutes. Stopping for 3 minutes.")
-            time.sleep(60 * 3)
+        logger.info(f"Completed in {minutes} minutes.")
 
     except Exception as general_exception:
-        print(
-            f"Error ingesting data into {index_name}."
-            + f"Removing new index. Exception: {str(general_exception)}"
+        logger.error(
+            f"Error ingesting data into {index_name}. Removing new index. Exception: {str(general_exception)}"
         )
-
         delete_index(index_name)
-        raise general_exception
+        raise
 
 
-def background_task():
-    """
-    Executes the data sync process in the background
-    """
-    while True:
-        try:
-            execute_sync()
-        except Exception as general_exception:
-            print(f"Error executing sync. Exception: {str(general_exception)}")
-            traceback.print_exc()
-        finally:
-            time.sleep(60)
-
-
-execute_sync()
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        logger.critical(f"An error occurred: {e}")
+        traceback.print_exc()
+        exit(1)
