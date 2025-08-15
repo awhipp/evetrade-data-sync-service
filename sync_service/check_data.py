@@ -9,9 +9,9 @@ from elasticsearch import Elasticsearch, RequestsHttpConnection
 from urllib3 import PoolManager, Timeout
 
 ES_HOST = os.environ["ES_HOST"]
-ES_TIMEOUT = int(os.environ.get("ES_TIMEOUT", 30))  # Default timeout is 30 seconds
+ES_TIMEOUT = int(os.environ.get("ES_TIMEOUT") or 30)  # Default timeout is 30 seconds
 ES_RETRY_ON_TIMEOUT = os.environ.get("ES_RETRY_ON_TIMEOUT", "true").lower() == "true"
-ES_RETRIES = int(os.environ.get("ES_RETRIES", 10))
+ES_RETRIES = int(os.environ.get("ES_RETRIES") or 10)
 
 # Create a custom Timeout object
 custom_timeout = Timeout(connect=ES_TIMEOUT, read=ES_TIMEOUT)
