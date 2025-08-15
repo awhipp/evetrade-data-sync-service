@@ -1,27 +1,24 @@
 # -*- encoding: utf-8 -*-
-""" Helper and utils functions """
+"""Helper and utils functions"""
 import base64
 import hashlib
 import os
-
 from datetime import datetime
 from email.utils import parsedate
 
-from .cache import BaseCache
-from .cache import DictCache
-from .cache import DummyCache
+from .cache import BaseCache, DictCache, DummyCache
 
 
 def make_cache_key(request):
-    """ Generate a cache key from request object data """
-    headers = frozenset(request._p['header'].items())
-    path = frozenset(request._p['path'].items())
-    query = frozenset(request._p['query'])
+    """Generate a cache key from request object data"""
+    headers = frozenset(request._p["header"].items())
+    path = frozenset(request._p["path"].items())
+    query = frozenset(request._p["query"])
     return (request.url, headers, path, query)
 
 
 def check_cache(cache):
-    """ check if a cache fits esipy needs or not """
+    """check if a cache fits esipy needs or not"""
     if isinstance(cache, BaseCache):
         return cache
     elif cache is False:
@@ -29,18 +26,14 @@ def check_cache(cache):
     elif cache is None:
         return DummyCache()
     else:
-        raise ValueError('Provided cache must implement BaseCache')
+        raise ValueError("Provided cache must implement BaseCache")
 
 
 def get_cache_time_left(expires_header):
-    """ return the time left in second for an expires header """
+    """return the time left in second for an expires header"""
     epoch = datetime(1970, 1, 1)
     # this date is ALWAYS in UTC (RFC 7231)
-    expire = (
-        datetime(
-            *parsedate(expires_header)[:6]
-        ) - epoch
-    ).total_seconds()
+    expire = (datetime(*parsedate(expires_header)[:6]) - epoch).total_seconds()
     now = (datetime.utcnow() - epoch).total_seconds()
     return int(expire) - int(now)
 
@@ -57,9 +50,9 @@ def generate_code_verifier(n_bytes=64):
     Returns:
         Bytestring, representing urlsafe base64-encoded random data.
     """
-    verifier = base64.urlsafe_b64encode(
-        os.urandom(n_bytes)
-    ).rstrip(b'=').decode('utf-8')
+    verifier = (
+        base64.urlsafe_b64encode(os.urandom(n_bytes)).rstrip(b"=").decode("utf-8")
+    )
 
     # https://tools.ietf.org/html/rfc7636#section-4.1
     # minimum length of 43 characters and a maximum length of 128 characters.
@@ -84,5 +77,5 @@ def generate_code_challenge(verifier):
         Bytestring, representing a urlsafe base64-encoded sha256 hash digest,
             without '=' padding.
     """
-    digest = hashlib.sha256(verifier.encode('utf-8')).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b'=').decode('utf-8')
+    digest = hashlib.sha256(verifier.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("utf-8")

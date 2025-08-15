@@ -29,6 +29,18 @@ Its primary purpose is to keep your search and cache layers up-to-date with the 
    poetry run python app.py
    ```
 
+## Precommit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to manage and maintain code quality. To enable pre-commit hooks, install the pre-commit package and run the following command:
+
+```bash
+poetry run pre-commit install
+```
+
+```bash
+poetry run pre-commit run --all-files
+```
+
 ## ESIPy Fork for Python 3.10+
 
 The original [ESIPy](https://github.com/ESIpy/ESIpy) library only supports Python versions up to 3.9 due to its dependency on [pyswagger](https://github.com/mission-liao/pyswagger), which is not maintained for newer Python versions.

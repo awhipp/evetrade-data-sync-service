@@ -28,6 +28,8 @@ package-mode = false
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^7.3.0"
+pre-commit = "^4.0.0"
+black = "^25.1.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

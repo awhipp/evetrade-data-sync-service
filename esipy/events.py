@@ -1,22 +1,22 @@
 # -*- encoding: utf-8 -*-
-""" Event / Signal definition. Signals are used to hook methods
+"""Event / Signal definition. Signals are used to hook methods
 to some defined event within EsiPy for the user to be able to do
-specific actions at some times """
+specific actions at some times"""
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
 
 class Signal(object):
-    """ Signal class. This class allows subscribers to hook to some specific
-    event and be notified when something happen """
+    """Signal class. This class allows subscribers to hook to some specific
+    event and be notified when something happen"""
 
     def __init__(self):
-        """ Alarm constructor. """
+        """Alarm constructor."""
         self.event_receivers = []
 
     def add_receiver(self, receiver):
-        """ Add a receiver to the list of receivers.
+        """Add a receiver to the list of receivers.
 
         :param receiver: a callable variable
         """
@@ -25,7 +25,7 @@ class Signal(object):
         self.event_receivers.append(receiver)
 
     def remove_receiver(self, receiver):
-        """ Remove a receiver to the list of receivers.
+        """Remove a receiver to the list of receivers.
 
         :param receiver: a callable variable
         """
@@ -33,7 +33,7 @@ class Signal(object):
             self.event_receivers.remove(receiver)
 
     def send(self, **kwargs):
-        """ Trigger all receiver and pass them the parameters
+        """Trigger all receiver and pass them the parameters
         If an exception is raised, it will stop the process and all receivers
         may not be triggered at this moment.
 
@@ -43,7 +43,7 @@ class Signal(object):
             receiver(**kwargs)
 
     def send_robust(self, **kwargs):
-        """ Trigger all receiver and pass them the parameters
+        """Trigger all receiver and pass them the parameters
         If an exception is raised it will be catched and displayed as error
         in the logger (if defined).
 
@@ -55,7 +55,7 @@ class Signal(object):
             except Exception:  # pylint: disable=W0703
                 LOGGER.exception(
                     'Exception while sending to "%s".',
-                    getattr(receiver, '__name__', repr(receiver))
+                    getattr(receiver, "__name__", repr(receiver)),
                 )
 
 
