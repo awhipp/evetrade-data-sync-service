@@ -9,7 +9,20 @@ on:
     - cron:  '*/5 * * * *' 
     
 env:
+  # AWS S3 Credentials
+  AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+  AWS_BUCKET: ${{ secrets.AWS_BUCKET }}
+  AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+
+  # Elasticsearch Configuration
+  ES_ALIAS: ${{ secrets.ES_ALIAS }}
   ES_HOST: ${{ secrets.ES_HOST }}
+  ES_TIMEOUT: ${{ secrets.ES_TIMEOUT }}
+
+  # EVE Swagger Interface Configuration
+  ESI_CLIENT_ID: ${{ secrets.ESI_CLIENT_ID }}
+  ESI_REFRESH_TOKEN: ${{ secrets.ESI_REFRESH_TOKEN }}
+  ESI_SECRET_KEY: ${{ secrets.ESI_SECRET_KEY }}
 
 jobs:
   lint-and-test:
