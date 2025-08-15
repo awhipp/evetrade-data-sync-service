@@ -12,7 +12,7 @@ env:
   ES_HOST: ${{ secrets.ES_HOST }}
 
 jobs:
-  lint-and-test:
+  check-data-sync:
     runs-on: ubuntu-latest
     strategy:
       matrix:
