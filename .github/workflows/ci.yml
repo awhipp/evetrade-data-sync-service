@@ -39,9 +39,6 @@ jobs:
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-root --with dev
 
-    - name: Install project
-      run: poetry install --no-interaction
-
     - name: Run black (check only)
       run: poetry run black --check --diff .
 

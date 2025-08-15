@@ -61,8 +61,5 @@ jobs:
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-root --with dev
 
-    - name: Install project
-      run: poetry install --no-interaction
-
-    - name: Checking Data Sync
-      run: poetry run python ./sync_service/check_data.py
+    - name: Running Sync
+      run: poetry run python ./app.py
